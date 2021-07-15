@@ -38,7 +38,11 @@ defmodule Statix.Mixfile do
   end
 
   defp deps() do
-    [{:ex_doc, "~> 0.20.0", only: :dev}]
+    [
+      {:credo, "~> 1.5", only: [:dev, :test]},
+      {:dialyxir, "~> 1.1", only: [:dev, :test]},
+      {:ex_doc, "~> 0.20.0", only: :dev},
+    ]
   end
 
   defp docs() do
