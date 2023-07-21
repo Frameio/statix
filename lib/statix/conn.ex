@@ -28,32 +28,7 @@ defmodule Statix.Conn do
 
   def transmit(%__MODULE__{header: header, sock: sock}, type, key, val, options)
       when is_binary(val) and is_list(options) do
-    result =
-      header
-      |> Packet.build(type, key, val, options)
-      |> transmit(sock)
-
-    if result == {:error, :port_closed} do
-      Logger.error(fn ->
-        if(is_atom(sock), do: "", else: "Statix ") <>
-          "#{inspect(sock)} #{type} metric \"#{key}\" lost value #{val}" <> " due to port closure"
-      end)
-    end
-
-    result
-  end
-
-  defp transmit(packet, sock) do
-    try do
-      :gen_udp.send(sock, packet)
-    rescue
-      ArgumentError ->
-        {:error, :port_closed}
-    else
-      true ->
-        receive do
-          {:inet_reply, _port, status} -> status
-        end
-    end
+    packet = Packet.build(header, type, key, val, options)
+    :gen_udp.send(sock, packet)
   end
 end
