@@ -15,7 +15,8 @@ defmodule Statix.Conn do
     case :inet.getaddr(host, :inet) do
       {:ok, address} ->
         header = Packet.header(address, port)
-        %__MODULE__{header: header}
+        {:ok, sock} = :gen_udp.open(0, active: false)
+        %__MODULE__{header: header, sock: sock}
 
       {:error, reason} ->
         raise(
@@ -23,11 +24,6 @@ defmodule Statix.Conn do
             "due to reason: #{:inet.format_error(reason)}"
         )
     end
-  end
-
-  def open(%__MODULE__{} = conn) do
-    {:ok, sock} = :gen_udp.open(0, active: false)
-    %__MODULE__{conn | sock: sock}
   end
 
   def transmit(%__MODULE__{header: header, sock: sock}, type, key, val, options)
@@ -49,7 +45,7 @@ defmodule Statix.Conn do
 
   defp transmit(packet, sock) do
     try do
-      Port.command(sock, packet)
+      :gen_udp.send(sock, packet)
     rescue
       ArgumentError ->
         {:error, :port_closed}

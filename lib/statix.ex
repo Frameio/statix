@@ -52,8 +52,6 @@ defmodule Statix do
     * `:tags` - ([binary]) a list of global tags that will be sent with all
       metrics. By default this option is not present.
       See the "Tags" section for more information.
-    * `:pool_size` - (integer) number of ports used to distribute the metric sending.
-      Defaults to `1`. See the "Pooling" section for more information.
 
   By default, the configuration is evaluated once, at compile time.
   If you plan on changing the configuration at runtime, you must specify the
@@ -87,20 +85,6 @@ defmodule Statix do
   In the example above, the UDP packet will only be sent to the server about
   half of the time, but the resulting value will be adjusted on the server
   according to the given sample rate.
-
-  ## Pooling
-
-  Statix transmits data using [ports](https://hexdocs.pm/elixir/Port.html).
-
-  If a port is busy when you try to send a command to it, the sender may be suspended and some blocking may occur. This becomes more of an issue in highly concurrent environments.
-
-  In order to get around that, Statix allows you to start multiple ports, and randomly picks one at the time of transmit.
-
-  This option can be configured via the `:pool_size` option:
-
-      config :statix, MyApp.Statix,
-        pool_size: 3
-
   """
 
   alias __MODULE__.Conn
@@ -289,7 +273,6 @@ defmodule Statix do
             statix = Statix.new(__MODULE__, options)
             Application.put_env(:statix, @statix_key, statix)
 
-            Statix.open(statix)
             :ok
           end
 
@@ -313,7 +296,6 @@ defmodule Statix do
               )
             end
 
-            Statix.open(@statix)
             :ok
           end
 
@@ -377,7 +359,7 @@ defmodule Statix do
     end
   end
 
-  defstruct [:conn, :tags, :pool]
+  defstruct [:conn, :tags]
 
   @doc false
   def new(module, options) do
@@ -387,28 +369,13 @@ defmodule Statix do
 
     %__MODULE__{
       conn: %{conn | header: header},
-      pool: build_pool(module, config.pool_size),
       tags: config.tags
     }
   end
 
-  defp build_pool(module, 1), do: [module]
-
-  defp build_pool(module, size) do
-    Enum.map(1..size, &:"#{module}-#{&1}")
-  end
-
-  @doc false
-  def open(%__MODULE__{conn: conn, pool: pool}) do
-    Enum.each(pool, fn name ->
-      %{sock: sock} = Conn.open(conn)
-      Process.register(sock, name)
-    end)
-  end
-
   @doc false
   def transmit(
-        %{conn: conn, pool: pool, tags: tags},
+        %{conn: conn, tags: tags},
         type,
         key,
         value,
@@ -420,15 +387,11 @@ defmodule Statix do
     if is_nil(sample_rate) or sample_rate >= :rand.uniform() do
       options = put_global_tags(options, tags)
 
-      %{conn | sock: pick_name(pool)}
-      |> Conn.transmit(type, key, to_string(value), options)
+      Conn.transmit(conn, type, key, to_string(value), options)
     else
       :ok
     end
   end
-
-  defp pick_name([name]), do: name
-  defp pick_name(pool), do: Enum.random(pool)
 
   defp get_config(module, overrides) do
     {module_env, global_env} =
@@ -448,7 +411,6 @@ defmodule Statix do
       prefix: build_prefix(env, overrides),
       host: Keyword.get(options, :host, "127.0.0.1"),
       port: Keyword.get(options, :port, 8125),
-      pool_size: Keyword.get(options, :pool_size, 1),
       tags: tags
     }
   end
